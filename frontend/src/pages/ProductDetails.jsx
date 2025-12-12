@@ -15,7 +15,8 @@ const ProductDetails = () => {
             const fetchProduct = async () => {
                 try {
                     const res = await axios.get('/search?query=');
-                    const found = res.data.find(p => p.id === parseInt(id));
+                    // Ensure we compare strings properly (ObjectId is string)
+                    const found = res.data.find(p => String(p.id) === String(id));
                     if (found) {
                         setProduct(found);
                     }
@@ -40,10 +41,10 @@ const ProductDetails = () => {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px', padding: '20px' }}>
                     <div style={{ flex: '1 1 300px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                         <img
-                            src={product.image.startsWith('http') ? product.image : `http://localhost:5000${product.image}`}
+                            src={product.image}
                             alt={product.name}
                             style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '10px' }}
-                            onError={(e) => { e.target.src = 'https://placehold.co/300x300?text=No+Image'; }}
+                            onError={(e) => { e.target.src = '/static/images/placeholder.svg'; }}
                         />
                     </div>
 
