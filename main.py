@@ -232,7 +232,7 @@ def search():
     query = request.args.get('query', '')
     db = get_db()
     results = []
-    if db:
+    if db is not None:
         # Simple regex search
         products = list(db.products.find({"product_name": {"$regex": query, "$options": "i"}}))
         for p in products:
