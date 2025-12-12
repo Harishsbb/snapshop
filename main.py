@@ -17,7 +17,7 @@ app.secret_key = 'your_super_secure_secret_key' # Use a strong key sessions
 CORS(app, supports_credentials=True, origins=["http://localhost:5173", "https://snapshop-web.vercel.app"])
 
 # MongoDB configuration
-MONGO_URI = 'mongodb+srv://admin:harish123@cluster0.cfoj6si.mongodb.net/barcodedb?retryWrites=true&w=majority&appName=Cluster0'
+MONGO_URI = os.environ.get('MONGO_URI') or 'mongodb+srv://admin:harish123@cluster0.cfoj6si.mongodb.net/barcodedb?retryWrites=true&w=majority&appName=Cluster0'
 DB_NAME = 'barcodedb'
 
 # --- Utility Function for Database Connection ---
