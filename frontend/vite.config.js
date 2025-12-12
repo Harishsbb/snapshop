@@ -11,7 +11,7 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },
-      '/static': 'http://localhost:5000',
+
       '/login': 'http://localhost:5000',
       '/register': 'http://localhost:5000',
       '/logout': 'http://localhost:5000',
@@ -24,6 +24,7 @@ export default defineConfig({
       '/change-quantity': 'http://localhost:5000',
       '/qr': 'http://localhost:5000',
       '/get-scanned-items': 'http://localhost:5000',
+      '/scan-item': 'http://localhost:5000',
       '/add-more': 'http://localhost:5000',
       '/search': 'http://localhost:5000',
       '/register-scanner': 'http://localhost:5000',

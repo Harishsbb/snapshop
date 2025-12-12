@@ -42,7 +42,7 @@ def get_cart_for_user():
         return {'products': [], 'total_price': 0.0}
     
     db = get_db()
-    if not db: return {'products': [], 'total_price': 0.0}
+    if db is None: return {'products': [], 'total_price': 0.0}
 
     username = session['username']
     cart = db.carts.find_one({"username": username})
@@ -57,7 +57,7 @@ def update_cart_in_db(products, total_price):
         return
     
     db = get_db()
-    if not db: return
+    if db is None: return
 
     username = session['username']
     db.carts.update_one(
@@ -84,32 +84,42 @@ def scan_item():
     if not product:
          return jsonify({"status": "error", "message": "Product not found"})
     
-    # Get current cart
-    cart = get_cart_for_user()
-    current_products = cart.get('products', [])
-    
-    # Check if item exists in cart
-    found = False
-    for p in current_products:
-        if p['name'] == product['product_name']:
-            p['quantity'] += 1
-            found = True
-            break
-            
-    if not found:
-        current_products.append({
-            "name": product['product_name'],
-            "price": float(product['product_price']),
-            "quantity": 1
-        })
+    try:
+        # Get current cart
+        cart = get_cart_for_user()
+        current_products = cart.get('products', [])
         
-    # Recalculate total
-    total_price = sum(p['price'] * p['quantity'] for p in current_products)
-    
-    # Save back to DB
-    update_cart_in_db(current_products, total_price)
-    
-    return jsonify({"status": "success", "product": product['product_name']})
+        # Check if item exists in cart
+        found = False
+        for p in current_products:
+            if p['name'] == product['product_name']:
+                p['quantity'] += 1
+                found = True
+                break
+                
+        if not found:
+            try:
+                price = float(product['product_price'])
+            except (ValueError, TypeError):
+                print(f"Price conversion error for {product['product_name']}: {product['product_price']}")
+                price = 0.0 # Fallback
+                
+            current_products.append({
+                "name": product['product_name'],
+                "price": price,
+                "quantity": 1
+            })
+            
+        # Recalculate total
+        total_price = sum(float(p['price']) * int(p['quantity']) for p in current_products)
+        
+        # Save back to DB
+        update_cart_in_db(current_products, total_price)
+        
+        return jsonify({"status": "success", "product": product['product_name']})
+    except Exception as e:
+        print(f"CRITICAL ERROR in scan_item: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/get-scanned-items', methods=['GET'])
 def get_scanned_items():
@@ -238,7 +248,7 @@ def search():
 @app.route('/recommended', methods=['GET'])
 def recommended():
     db = get_db()
-    if db:
+    if db is not None:
         pipeline = [{"$sample": {"size": 5}}]
         products_db = list(db.products.aggregate(pipeline))
         result = []

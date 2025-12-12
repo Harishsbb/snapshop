@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import axios from 'axios';
 import '../index.css';
 
@@ -9,19 +9,9 @@ const Scanner = () => {
     const [scanning, setScanning] = useState(false);
     const [recommendations, setRecommendations] = useState([]);
 
-    // Sounds
-    const beepSound = useRef(null);
-    const successSound = useRef(null);
-    const scannerRef = useRef(null);
-
-    useEffect(() => {
-        // Initialize sounds
-        beepSound.current = new Audio('/static/sounds/beep-02.mp3'); // We will need to move sounds to public folder or standard URL
-        // Fallback or use standard browser beep if file missing? 
-        // For now let's assume assets exist in public. 
-        // NOTE: In Vercel React, static assets typically go in 'public' folder. 
-        // The python backend used to serve them. We should likely move them or point key urls there.
-    }, []);
+    const scannerRef = useRef(null); // Stores the Html5Qrcode instance
+    const lastScannedCode = useRef(null);
+    const lastScannedTime = useRef(0);
 
     const fetchCart = async () => {
         try {
@@ -42,77 +32,115 @@ const Scanner = () => {
         }
     };
 
-    const handleScanSuccess = async (decodedText, decodedResult) => {
-        // Prevent spamming requests for the same barcode instantly? 
-        // Html5QrcodeScanner has fps limit, but we can also debounce here.
-
-        console.log(`Scan result: ${decodedText}`, decodedResult);
-
-        // Play Beep
-        // beepSound.current.play().catch(e => console.log('Audio play failed', e));
-
-        try {
-            // Send barcode to backend
-            const res = await axios.post('/scan-item', { barcode: decodedText });
-
-            if (res.data.status === 'success') {
-                // Update UI
-                fetchCart();
-            } else {
-                console.log("Product not found or error:", res.data);
-            }
-        } catch (err) {
-            console.error("Scan API error", err);
-        }
-    };
-
-    const handleScanFailure = (error) => {
-        // console.warn(`Code scan error = ${error}`);
-    };
-
-    useEffect(() => {
-        if (scanning) {
-            const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.QR_CODE]
-            };
-
-            // Render scanner
-            // We need to ensure the DOM element exists
-            const scannerId = "reader";
-
-            if (!scannerRef.current) {
-                scannerRef.current = new Html5QrcodeScanner(scannerId, config, /* verbose= */ false);
-                scannerRef.current.render(handleScanSuccess, handleScanFailure);
-            }
-        }
-
-        return () => {
-            if (scannerRef.current) {
-                scannerRef.current.clear().catch(error => {
-                    console.error("Failed to clear html5QrcodeScanner. ", error);
-                });
-                scannerRef.current = null;
-            }
-        };
-    }, [scanning]);
-
     // Initial load
     useEffect(() => {
         fetchCart();
         fetchRecommendations();
     }, []);
 
-    const handleStartScan = () => {
-        setScanning(true);
-        // Also call backend to clear session/cart if needed?
-        // axios.post('/start', ...); 
+    const handleScanSuccess = async (decodedText, decodedResult) => {
+        const now = Date.now();
+        // Debounce: Ignore same code if scanned within 2 seconds
+        if (decodedText === lastScannedCode.current && (now - lastScannedTime.current) < 2000) {
+            return;
+        }
+
+        lastScannedCode.current = decodedText;
+        lastScannedTime.current = now;
+
+        console.log(`Scan result: ${decodedText}`);
+
+        try {
+            const res = await axios.post('/scan-item', { barcode: decodedText });
+
+            if (res.data.status === 'success') {
+                const beep = new Audio('/static/sounds/success.mp3');
+                beep.play().catch(e => console.log('Sound error', e));
+                alert(`Added: ${res.data.product}`);
+                fetchCart();
+            } else {
+                alert(res.data.message || "Product not found");
+            }
+        } catch (err) {
+            console.error("Scan API error detail:", err);
+            if (err.response) {
+                // The request was made and the server responded with a status code
+                // that falls out of the range of 2xx
+                alert(`Server Error: ${err.response.status} - ${err.response.data.message || err.response.statusText}`);
+            } else if (err.request) {
+                // The request was made but no response was received
+                alert("Network Error: No response from server. Check if backend is running on port 5000.");
+            } else {
+                // Something happened in setting up the request that triggered an Error
+                alert(`Error: ${err.message}`);
+            }
+        }
     };
 
-    const handleStopScan = () => {
-        setScanning(false);
-    };
+    useEffect(() => {
+        // Start scanner when 'scanning' state becomes true
+        if (scanning) {
+            const startScanner = async () => {
+                try {
+                    // Ensure previous instance is stopped/cleared
+                    if (scannerRef.current) {
+                        try {
+                            await scannerRef.current.stop();
+                        } catch (e) { /* ignore if not running */ }
+                        scannerRef.current = null;
+                    }
+
+                    const html5QrCode = new Html5Qrcode("reader");
+                    scannerRef.current = html5QrCode;
+
+                    const config = {
+                        fps: 10,
+                        qrbox: { width: 250, height: 250 },
+                        formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.QR_CODE]
+                    };
+
+                    await html5QrCode.start(
+                        { facingMode: "environment" },
+                        config,
+                        handleScanSuccess,
+                        (errorMessage) => {
+                            // console.log(errorMessage); // verbose
+                        }
+                    );
+                } catch (err) {
+                    console.error("Error starting scanner", err);
+                    setScanning(false);
+                    alert("Failed to start camera. Please ensure you gave permission.");
+                }
+            };
+
+            // Allow a small tick for DOM element #reader to be ready
+            setTimeout(startScanner, 100);
+        } else {
+            // Cleanup when scanning becomes false
+            if (scannerRef.current) {
+                scannerRef.current.stop().then(() => {
+                    scannerRef.current.clear();
+                    scannerRef.current = null;
+                }).catch(err => {
+                    console.warn("Failed to stop scanner", err);
+                });
+            }
+        }
+
+        // Cleanup on unmount
+        return () => {
+            if (scannerRef.current) {
+                try {
+                    scannerRef.current.stop();
+                    scannerRef.current.clear();
+                } catch (e) { console.warn(e); }
+            }
+        };
+    }, [scanning]);
+
+    const handleStartScan = () => setScanning(true);
+    const handleStopScan = () => setScanning(false);
 
     const handleGenerateBill = () => {
         window.open('/bill', '_blank', 'width=600,height=800');
@@ -122,23 +150,27 @@ const Scanner = () => {
         <div className="fade-in" style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
             <h1>Smart Shopping Scanner</h1>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 1fr', gap: '20px' }}>
                 {/* Left Column: Camera */}
                 <div className="card" style={{ backgroundColor: 'white', minHeight: '400px', position: 'relative' }}>
-                    {!scanning ? (
-                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                    {/* The reader div must always exist in DOM if we want to mount to it, 
+                         or be conditionally rendered. Here we conditionally render the div 
+                         BUT we need to be careful with timing. */}
+                    {scanning && <div id="reader" style={{ width: '100%', height: '100%' }}></div>}
+
+                    {!scanning && (
+                        <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
                             <h3>Ready to Shop?</h3>
                             <button className="btn btn-primary" onClick={handleStartScan} style={{ fontSize: '1.2em', padding: '15px 30px' }}>
                                 Start Camera
                             </button>
                         </div>
-                    ) : (
-                        <div>
-                            <div id="reader"></div>
-                            <button className="btn btn-danger" onClick={handleStopScan} style={{ marginTop: '10px', width: '100%' }}>
-                                Stop Camera
-                            </button>
-                        </div>
+                    )}
+
+                    {scanning && (
+                        <button className="btn btn-danger" onClick={handleStopScan} style={{ marginTop: '10px', width: '100%' }}>
+                            Stop Camera
+                        </button>
                     )}
                 </div>
 
@@ -156,7 +188,6 @@ const Scanner = () => {
                                     <th style={{ padding: '10px', textAlign: 'left' }}>Item</th>
                                     <th style={{ padding: '10px', textAlign: 'center' }}>Qty</th>
                                     <th style={{ padding: '10px', textAlign: 'right' }}>Price</th>
-                                    <th style={{ padding: '10px' }}></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -164,18 +195,14 @@ const Scanner = () => {
                                     <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
                                         <td style={{ padding: '10px' }}>
                                             <div style={{ fontWeight: 'bold' }}>{item.name}</div>
-                                            {/* <small>{item.barcode}</small> */}
                                         </td>
                                         <td style={{ padding: '10px', textAlign: 'center' }}>{item.quantity}</td>
                                         <td style={{ padding: '10px', textAlign: 'right' }}>₹{(item.price * item.quantity).toFixed(2)}</td>
-                                        <td style={{ padding: '10px', textAlign: 'right' }}>
-                                            {/* Could add remove button here */}
-                                        </td>
                                     </tr>
                                 ))}
                                 {scannedItems.length === 0 && (
                                     <tr>
-                                        <td colSpan="4" style={{ padding: '30px', textAlign: 'center', color: '#ccc' }}>
+                                        <td colSpan="3" style={{ padding: '30px', textAlign: 'center', color: '#ccc' }}>
                                             Cart is empty. Scan products to begin!
                                         </td>
                                     </tr>
