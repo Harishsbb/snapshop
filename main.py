@@ -13,7 +13,8 @@ import random
 # --- Global State & Setup ---
 app = Flask(__name__)
 app.secret_key = 'your_super_secure_secret_key' # Use a strong key sessions
-CORS(app, supports_credentials=True) # Enable Cross-Origin Resource Sharing
+# CORS Setup: Must specify exact origins for credentials (cookies) to work
+CORS(app, supports_credentials=True, origins=["http://localhost:5173", "https://snapshop-web.vercel.app"])
 
 # MongoDB configuration
 MONGO_URI = 'mongodb+srv://admin:harish123@cluster0.cfoj6si.mongodb.net/barcodedb?retryWrites=true&w=majority&appName=Cluster0'
