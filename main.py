@@ -128,18 +128,29 @@ def get_scanned_items():
     cart = get_cart_for_user()
     return jsonify({"products": cart.get('products', []), "total_prize": cart.get('total_price', 0.0)})
 
-@app.route('/change-quantity', methods=['POST'])
-def change_quantity():
+@app.route('/remove-item', methods=['POST'])
+def remove_item():
     if 'username' not in session: return jsonify({"status": "error"}), 401
     
     data = request.json
     product_name = data.get('product_name')
-    # Use 'quantity' or 'action' logic. Assuming simple set logic for now or increment.
-    # The original was setting specific quantity.
     
-    # ... implementation for cart update ...
-    # For brevity, let's just implement remove for now if quantity is needed.
-    return jsonify({"status": "not implemented yet"})
+    try:
+        cart = get_cart_for_user()
+        current_products = cart.get('products', [])
+        
+        # Filter out the item to remove
+        new_products = [p for p in current_products if p['name'] != product_name]
+        
+        # Recalculate total
+        total_price = sum(float(p['price']) * int(p['quantity']) for p in new_products)
+        
+        update_cart_in_db(new_products, total_price)
+        
+        return jsonify({"status": "success", "message": "Item removed"})
+    except Exception as e:
+        print(f"Remove error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/start', methods=['POST'])
 def start_scanning():
@@ -265,4 +276,4 @@ def recommended():
 # --- Vercel requires app to be exported as 'app' or 'application' ---
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5003)

@@ -69,7 +69,7 @@ const Scanner = () => {
                 alert(`Server Error: ${err.response.status} - ${err.response.data.message || err.response.statusText}`);
             } else if (err.request) {
                 // The request was made but no response was received
-                alert("Network Error: No response from server. Check if backend is running on port 5000.");
+                alert("Network Error: No response from server. Check if backend is running.");
             } else {
                 // Something happened in setting up the request that triggered an Error
                 alert(`Error: ${err.message}`);
@@ -142,6 +142,16 @@ const Scanner = () => {
     const handleStartScan = () => setScanning(true);
     const handleStopScan = () => setScanning(false);
 
+    const handleRemoveItem = async (productName) => {
+        try {
+            await axios.post('/remove-item', { product_name: productName });
+            fetchCart();
+        } catch (err) {
+            console.error(err);
+            alert("Failed to remove item");
+        }
+    };
+
     const handleGenerateBill = () => {
         window.open('/bill', '_blank', 'width=600,height=800');
     };
@@ -153,9 +163,6 @@ const Scanner = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 1fr', gap: '20px' }}>
                 {/* Left Column: Camera */}
                 <div className="card" style={{ backgroundColor: 'white', minHeight: '400px', position: 'relative' }}>
-                    {/* The reader div must always exist in DOM if we want to mount to it, 
-                         or be conditionally rendered. Here we conditionally render the div 
-                         BUT we need to be careful with timing. */}
                     {scanning && <div id="reader" style={{ width: '100%', height: '100%' }}></div>}
 
                     {!scanning && (
@@ -188,6 +195,7 @@ const Scanner = () => {
                                     <th style={{ padding: '10px', textAlign: 'left' }}>Item</th>
                                     <th style={{ padding: '10px', textAlign: 'center' }}>Qty</th>
                                     <th style={{ padding: '10px', textAlign: 'right' }}>Price</th>
+                                    <th style={{ padding: '10px', textAlign: 'center' }}>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -198,11 +206,27 @@ const Scanner = () => {
                                         </td>
                                         <td style={{ padding: '10px', textAlign: 'center' }}>{item.quantity}</td>
                                         <td style={{ padding: '10px', textAlign: 'right' }}>₹{(item.price * item.quantity).toFixed(2)}</td>
+                                        <td style={{ padding: '10px', textAlign: 'center' }}>
+                                            <button
+                                                onClick={() => handleRemoveItem(item.name)}
+                                                style={{
+                                                    background: 'transparent',
+                                                    border: 'none',
+                                                    color: '#e74c3c',
+                                                    cursor: 'pointer',
+                                                    fontSize: '1.2em',
+                                                    fontWeight: 'bold'
+                                                }}
+                                                title="Remove Item"
+                                            >
+                                                ✕
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                                 {scannedItems.length === 0 && (
                                     <tr>
-                                        <td colSpan="3" style={{ padding: '30px', textAlign: 'center', color: '#ccc' }}>
+                                        <td colSpan="4" style={{ padding: '30px', textAlign: 'center', color: '#ccc' }}>
                                             Cart is empty. Scan products to begin!
                                         </td>
                                     </tr>
